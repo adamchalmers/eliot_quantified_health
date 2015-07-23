@@ -1,2 +1,1 @@
-python raw_generator.py
-open visualization.html
+python raw_generator.py && open output/index.html

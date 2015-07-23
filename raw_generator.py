@@ -10,14 +10,15 @@ This file MUST be placed in the same folder as "data.csv"
 """
 
 # These are the config parameters. Change them if you're using a different CSV structure.
-# Column numbers of important fields
-INPUT_FOLDER = "raw_data"
-OUTPUT_FILE_NAME = "visualization.html"
-DATA_FIELDS_NUMBER = [1, 2, 3]
-DATA_FIELDS_ENUM = [8]
+INPUT_FOLDER = "raw_data" # contains csv files
+OUTPUT_FOLDER = "output" # will contain the output website
+DATA_FIELDS_NUMBER = [1, 2, 3] # measurement fields which are numbers
+DATA_FIELDS_ENUM = [8] # fields whose value is an enumerated set of strings, e.g. sleep.
+HTML_HEADER = "<html><head><title>Visualizing your body</title><style>body {font-family: sans-serif;}</style></head><body>"
 
 def read_data(f, col):
-  """Yields (date, minute, temp) 3tuples."""
+  """Yields (date, minute, measurement) 3tuples.
+  Measurement is some recorded value, e.g. body heat, air measurement etc."""
   with open(f) as input_file:
     input_file.readline()
     i = 0
@@ -61,19 +62,19 @@ def read_data(f, col):
       raise e
 
 def group_by_day_numbers(input_files, col):
-  """Returns a dictionary where the date is a key, and the value is a list of (minute_num, temperature) pairs."""
+  """Returns a dictionary where the date is a key, and the value is a list of (minute_num, measurement) pairs."""
   days = defaultdict(list)
-  min_temp = 999
-  max_temp = 0
+  min_measurement = 999
+  max_measurement = 0
   for f in input_files:
     for line in read_data(f, col):
-      date, minute_num, temp = line
-      days[date].append((minute_num, temp))
-      if temp > 0 and temp > max_temp:
-        max_temp = temp
-      if temp > 0 and temp < min_temp:
-        min_temp = temp
-  return days, min_temp, max_temp
+      date, minute_num, measurement = line
+      days[date].append((minute_num, measurement))
+      if measurement > 0 and measurement > max_measurement:
+        max_measurement = measurement
+      if measurement > 0 and measurement < min_measurement:
+        min_measurement = measurement
+  return days, min_measurement, max_measurement
 
 def group_by_day_enums(input_files, col):
   """Dictionary of (date, value) pairs. Value is a string. Don't look for min/max."""
@@ -84,39 +85,41 @@ def group_by_day_enums(input_files, col):
       days[date].append((minute_num, measurement))
   return days
 
-def make_html_numbers(input_files, title, col):
-  """Generates an HTML file containing the data."""
+def html_numbers(input_files, title, col):
+  """Generates an HTML table containing numeric data from all input files."""
 
-  yield "<h1>Visualizing dataset '%s'</h1><table style='border-spacing: 0; white-space:nowrap;'>\n" % title
-  days, min_temp, max_temp = group_by_day_numbers(input_files, col)
+  yield "<h1>%s</h1><table style='border-spacing: 0; white-space:nowrap;'>\n" % title
+  days, min_measurement, max_measurement = group_by_day_numbers(input_files, col)
   for day in sorted(days):
 
     # Strip out just the important part of the date
     daystr = str(day)[:10]
     yield "<tr><td>%s</td>" % daystr
 
-    # Each minute becomes one cell in the table, colored according to temperature.
-    for minute, temp in days[day]:
-      if temp > -1:
-        temp = color_map(min_temp, max_temp, temp)
-        color = "rgb(%d,0,%d)" % (temp, 255-temp)
+    # Each minute becomes one cell in the table, colored according to measurement.
+    for minute, measurement in days[day]:
+      if measurement > -1:
+        measurement = color_map(min_measurement, max_measurement, measurement)
+        color = "rgb(%d,0,%d)" % (measurement, 255-measurement)
       else:
         color = "rgb(0,0,0)"
       yield "<td style='background-color:%s;'>" % color
     yield "</tr>"
   yield "</table>"
+
+  # Output a legend showing which values have which color
   yield "<br><h2>Legend</h2><table><tr>"
   yield "<td style='background-color: rgb(0,0,0); color: white'>Data missing</td>"
-  yield key_row(min_temp, max_temp, min_temp)
-  yield key_row(min_temp, max_temp, (min_temp*0.75 + max_temp*0.25))
-  yield key_row(min_temp, max_temp, (min_temp + max_temp) / 2)
-  yield key_row(min_temp, max_temp, (min_temp*0.25 + max_temp*0.75))
-  yield key_row(min_temp, max_temp, max_temp)
+  yield key_row(min_measurement, max_measurement, min_measurement)
+  yield key_row(min_measurement, max_measurement, (min_measurement*0.75 + max_measurement*0.25))
+  yield key_row(min_measurement, max_measurement, (min_measurement + max_measurement) / 2)
+  yield key_row(min_measurement, max_measurement, (min_measurement*0.25 + max_measurement*0.75))
+  yield key_row(min_measurement, max_measurement, max_measurement)
   yield "</tr></table>"
 
 
-def make_html_enums(input_files, title, col):
-  """Generates an HTML file containing the data."""
+def html_enums(input_files, title, col):
+  """Generates an HTML table containing the enumerated string data from all input files."""
 
   legend = {"rem": "#33CCFF",
         "light": "#3399FF",
@@ -135,24 +138,47 @@ def make_html_enums(input_files, title, col):
     daystr = str(day)[:10]
     yield "<tr><td>%s</td>" % daystr
 
-    # Each minute becomes one cell in the table, colored according to temperature.
+    # Each minute becomes one cell in the table, colored according to measurement.
     for minute, measurement in days[day]:
       yield "<td style='background-color:%s;'>" % legend[measurement]
     yield "</tr>"
   yield "</table>"
   yield "<br><h2>Legend</h2><table><tr>"
+
+  # Output a legend showing which values have which color
   for measurement, color in legend.items():
     yield "<td style='background-color: %s; color: white'>%s</td>" % (color, measurement)
   yield "</tr></table>"
 
-def key_row(l, h, temp):
-  return "<td style='background-color: rgb(%d,0,%d); color: white'>%s F</td>" % (color_map(l, h, temp), 255-color_map(l, h, temp), temp)
+def key_row(l, h, measurement):
+  """Outputs a legend cell for a numeric measurement, showing what color measurements of that value have."""
+  return "<td style='background-color: rgb(%d,0,%d); color: white'>%s F</td>" % (color_map(l, h, measurement), 255-color_map(l, h, measurement), measurement)
 
 def color_map(l, h, n):
   """Given a value n in the range [l,h],
      map n to its corresponding value in the range [0,255].
   """
   return (n - l)/(h-l) * 255
+
+def make_index(headers):
+
+  # Make the main index file, which links to the individual dataset files.
+  index_file = "%s/index.html" % OUTPUT_FOLDER
+
+  # Overwrite the index file:
+  with open(index_file, "w") as out:
+    out.write(HTML_HEADER)
+    out.write("<h1>Datasets available:</h1><select>")
+    out.write("<option value='-'>-</option>")
+
+  # Add a link to each dataset page:
+  with open(index_file, "a") as out:
+    for col in DATA_FIELDS_ENUM + DATA_FIELDS_NUMBER:
+      title = headers[col]
+      out.write("<option value='%s'>%s</option>" % (title, title))
+    out.write("</select><script src='script.js'></script>")
+    out.write("<p><a id='dataset'></a><p><iframe src='' width='900' height='600'><p>Your browser does not support iframes.</p></iframe>")
+    out.write("</body></html>")
 
 def visualize():
   # Find all files in the input directory
@@ -163,27 +189,31 @@ def visualize():
   with open(files[0]) as f:
     headers = f.readline().split(",")
 
-  # Clear the output file
-  with open(OUTPUT_FILE_NAME, "w") as out:
-    out.write("<html><head><title>Visualizing your body</title><style>body {font-family: sans-serif;}</style></head><body>")
-
-  # Write the HTML to the output file.
+  # Write the HTML to the output files.
   lines_out = 0
-  with open(OUTPUT_FILE_NAME, "a") as out:
-    for col in DATA_FIELDS_NUMBER:
-        for string in make_html_numbers(files, headers[col], col):
-          out.write(string)
-          lines_out += 1
-          if lines_out % 10000 == 0:
-            print "Writing line %d" % lines_out
-    for col in DATA_FIELDS_ENUM:
-        for string in make_html_enums(files, headers[col], col):
-          out.write(string)
-          lines_out += 1
-          if lines_out % 10000 == 0:
-            print "Writing line %d" % lines_out
-    out.write("</body></html>")
-  print "Output to %s." % OUTPUT_FILE_NAME
+  for cols, fn in [(DATA_FIELDS_NUMBER, html_numbers), (DATA_FIELDS_ENUM, html_enums)]:
+
+      # For each column, create a file that shows that column's dataset across all input data files.
+      for col in cols:
+
+        # Clear the output file
+        filename = "%s/%s.html" % (OUTPUT_FOLDER, headers[col])
+        with open(filename, "w") as out:
+          out.write(HTML_HEADER)
+
+        # Write the dataset table
+        with open(filename, "a") as out:
+
+          # Write a row to the table. Rows are taken from all days.
+          for string in fn(files, headers[col], col):
+            out.write(string)
+            lines_out += 1
+            if lines_out % 10000 == 0:
+              print "Writing line %d" % lines_out
+          out.write("</body></html>")
+        print "Output to %s." % filename
+  make_index(headers)
+
 
 if __name__ == "__main__":
   visualize()
