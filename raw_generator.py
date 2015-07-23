@@ -158,7 +158,7 @@ def visualize():
   # Find all files in the input directory
   print "Reading files from %s..." % INPUT_FOLDER
   files = ["%s/%s" % (INPUT_FOLDER, f) for f in os.listdir(INPUT_FOLDER)]
-  print "Read %d files..." % len(files)
+  print "Reading %d fields across %d files..." % ((len(DATA_FIELDS_ENUM) + len(DATA_FIELDS_NUMBER)), len(files))
   # Get the column headers from one of the files
   with open(files[0]) as f:
     headers = f.readline().split(",")
@@ -168,13 +168,20 @@ def visualize():
     out.write("<html><head><title>Visualizing your body</title><style>body {font-family: sans-serif;}</style></head><body>")
 
   # Write the HTML to the output file.
+  lines_out = 0
   with open(OUTPUT_FILE_NAME, "a") as out:
     for col in DATA_FIELDS_NUMBER:
         for string in make_html_numbers(files, headers[col], col):
           out.write(string)
+          lines_out += 1
+          if lines_out % 10000 == 0:
+            print "Writing line %d" % lines_out
     for col in DATA_FIELDS_ENUM:
         for string in make_html_enums(files, headers[col], col):
           out.write(string)
+          lines_out += 1
+          if lines_out % 10000 == 0:
+            print "Writing line %d" % lines_out
     out.write("</body></html>")
   print "Output to %s." % OUTPUT_FILE_NAME
 
